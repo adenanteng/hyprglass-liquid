@@ -248,6 +248,22 @@ noctalia config validate
 noctalia msg config-reload
 ```
 
+### Optional Nautilus background transparency
+
+[`config/nautilus-glass.css`](config/nautilus-glass.css) targets only `window.nautilus-window`. It sets view, sidebar, and headerbar background paint alpha to **20%**, with a transparent base window. It does not lower whole-window or widget opacity; text, icons, selection states, and thumbnails retain their normal rendering. Stacked widget backgrounds can still produce a different effective opacity.
+
+Tested with Nautilus **50.3.1**, GTK **4.22.5**, and libadwaita **1.9.4** in dark mode. Other GTK applications are not styled by this snippet. It uses named colors from the current GTK theme, so it follows palette updates. Without HyprGlass, these areas remain transparent but lose the glass effect.
+
+Back up your GTK files, copy the stylesheet to `${XDG_CONFIG_HOME:-$HOME/.config}/gtk-4.0/hyprglass-nautilus.css`, and append this import **after** your existing theme imports in `gtk.css`:
+
+```css
+@import url("hyprglass-nautilus.css");
+```
+
+To hide client-side close, maximize, and minimize buttons, merge `gtk-decoration-layout=:` into the existing `[Settings]` section of `gtk-4.0/settings.ini`. This setting applies to GTK4 applications, not just Nautilus; skip it if you want their usual titlebar buttons. Restart Nautilus while no file operation is running. Keep the normal XDG configuration directory; a temporary replacement can change unrelated desktop preferences.
+
+To undo the background styling, remove the import and restart Nautilus. Restore the previous `gtk-decoration-layout` value to undo the button preference. Do not replace the entire GTK configuration with this snippet.
+
 ## How the rendering changes work
 
 The layer renderer samples the live backdrop and uses the rendered surface's alpha mask to locate the visible contour. It computes a rim normal from threshold-normalized coverage and validates the distance along that normal against the mask, then applies refraction and a backdrop-tinted shoulder highlight. The bevel is applied after panel compositing so the panel fill does not hide it.

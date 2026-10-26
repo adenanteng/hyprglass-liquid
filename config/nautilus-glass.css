@@ -1,0 +1,11 @@
+/* Nautilus only: translucent backgrounds, opaque text/icons/thumbnails. */
+window.nautilus-window {
+    --window-bg-color: transparent;
+    --view-bg-color: alpha(@view_bg_color, 0.20);
+    --sidebar-bg-color: alpha(@sidebar_bg_color, 0.20);
+    --sidebar-backdrop-color: alpha(@sidebar_bg_color, 0.20);
+    --headerbar-bg-color: alpha(@headerbar_bg_color, 0.20);
+    --headerbar-backdrop-color: alpha(@headerbar_bg_color, 0.20);
+    background-color: transparent;
+    background-image: none;
+}
