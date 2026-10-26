@@ -1,6 +1,6 @@
 /* Nautilus only: a soft base background and a slightly denser sidebar. */
 window.nautilus-window {
-    --window-bg-color: alpha(@window_bg_color, 0.55);
+    --window-bg-color: alpha(@window_bg_color, 0.50);
     --view-bg-color: transparent;
     --sidebar-bg-color: alpha(@sidebar_bg_color, 0.20);
     --sidebar-backdrop-color: alpha(@sidebar_bg_color, 0.20);
