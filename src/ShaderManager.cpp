@@ -68,6 +68,7 @@ bool CShaderManager::compileGlassShader() {
     glassUniforms.useMask             = glGetUniformLocation(program, "useMask");
     glassUniforms.maskUVOffset        = glGetUniformLocation(program, "maskUVOffset");
     glassUniforms.maskUVScale         = glGetUniformLocation(program, "maskUVScale");
+    glassUniforms.joinedRect          = glGetUniformLocation(program, "joinedRect");
     glassUniforms.maskAlphaThreshold  = glGetUniformLocation(program, "maskAlphaThreshold");
     glassUniforms.maskCoverage        = glGetUniformLocation(program, "maskCoverage");
     glassUniforms.maskMode            = glGetUniformLocation(program, "maskMode");

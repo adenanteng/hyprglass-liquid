@@ -503,6 +503,40 @@ void CGlassLayerSurface::compositeAndRestore(PHLMONITOR monitor, float alpha, EM
         .uvScale   = {transformBox.w / monitorWidth, transformBox.h / monitorHeight},
     };
 
+    // An attached panel and its bar share an interior join, not two glass rims.
+    const bool isBar = layerSurface->m_namespace.starts_with("noctalia-bar-");
+    const bool isAttachedPanel = layerSurface->m_namespace == "noctalia-attached-panel";
+    if (isBar || isAttachedPanel) {
+        auto ownRegion = transformedBlurRegion(monitor, rawBox);
+        if (!ownRegion.empty()) {
+            const auto own = ownRegion.getExtents();
+            for (const auto& [key, glass] : g_pGlobalState->layerSurfaces) {
+                const auto other = glass->getLayerSurface();
+                if (!other || other == layerSurface || other->m_monitor.lock() != monitor)
+                    continue;
+                if ((isBar && other->m_namespace != "noctalia-attached-panel") ||
+                    (isAttachedPanel && !other->m_namespace.starts_with("noctalia-bar-")))
+                    continue;
+                const auto otherBox = LayerGeometry::computeLayerBox(other, monitor);
+                if (!otherBox)
+                    continue;
+                auto otherRegion = glass->transformedBlurRegion(monitor, *otherBox);
+                if (otherRegion.empty())
+                    continue;
+                const auto adjacent = otherRegion.getExtents();
+                const auto bar = isBar ? own : adjacent;
+                const auto panel = isBar ? adjacent : own;
+                const float overlap = std::min(bar.x + bar.width, panel.x + panel.width) - std::max(bar.x, panel.x);
+                if (overlap <= 0 || std::abs(panel.y - (bar.y + bar.height)) > 3.0 * monitor->m_scale)
+                    continue;
+                maskInfo.joinedRect = {static_cast<float>(adjacent.x - transformBox.x),
+                                       static_cast<float>(adjacent.y - transformBox.y),
+                                       static_cast<float>(adjacent.width), static_cast<float>(adjacent.height)};
+                break;
+            }
+        }
+    }
+
     switch (maskSource) {
         case EMaskSource::ALPHA_THRESHOLD: {
             const auto& cfg     = g_pGlobalState->config;

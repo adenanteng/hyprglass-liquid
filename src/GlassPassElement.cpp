@@ -41,7 +41,7 @@ std::optional<CBox> CGlassPassElement::paddedLogicalBox() const {
         return std::nullopt;
 
     const auto monitor = g_pHyprRenderer->m_renderData.pMonitor.lock();
-    auto box = WindowGeometry::computeWindowBox(window, monitor);
+    auto box = WindowGeometry::computeGlassBox(window, monitor);
     if (!box)
         return std::nullopt;
 
@@ -81,7 +81,7 @@ bool CGlassPassElement::needsLiveBlur() {
     if (!monitor || !window)
         return false;
 
-    const auto box = WindowGeometry::computeWindowBox(window, monitor);
+    const auto box = WindowGeometry::computeGlassBox(window, monitor);
     if (!box)
         return false;
 

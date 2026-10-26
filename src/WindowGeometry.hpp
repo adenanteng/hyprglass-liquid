@@ -1,11 +1,20 @@
 #pragma once
 
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprutils/math/Box.hpp>
 #include <optional>
 
 namespace WindowGeometry {
+
+[[nodiscard]] inline float rimWidth(PHLWINDOW window) {
+    if (!window || !window->m_ruleApplicator || !window->m_ruleApplicator->decorate().valueOrDefault() ||
+        Fullscreen::controller()->getFullscreenModes(window).internal != Fullscreen::FSMODE_NONE)
+        return 0.0f;
+    return 4.0f;
+}
 
 [[nodiscard]] inline std::optional<CBox> computeWindowBox(PHLWINDOW window, PHLMONITOR monitor) {
     if (!window || !monitor)
@@ -21,6 +30,13 @@ namespace WindowGeometry {
     box.translate(-monitor->m_position + window->m_floatingOffset);
     box.scale(monitor->m_scale);
     box.round();
+    return box;
+}
+
+[[nodiscard]] inline std::optional<CBox> computeGlassBox(PHLWINDOW window, PHLMONITOR monitor) {
+    auto box = computeWindowBox(window, monitor);
+    if (box)
+        box->expand(rimWidth(window) * monitor->m_scale);
     return box;
 }
 
@@ -44,7 +60,7 @@ namespace WindowGeometry {
 
     const auto monitor = window->m_monitor.lock();
     const float scale = monitor ? monitor->m_scale : 1.0f;
-    box.expand(paddingPx / scale);
+    box.expand(paddingPx / scale + rimWidth(window));
 
     return box;
 }

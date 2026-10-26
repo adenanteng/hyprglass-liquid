@@ -22,3 +22,10 @@ build/
 # Debug
 *.dwo
 *.pdb
+
+# Local backups and rendering outputs
+*.ppm
+*.png
+*.log
+check-relief
+.backups/

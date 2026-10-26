@@ -69,6 +69,7 @@ struct SMaskInfo {
     // Alpha mask only: glass fades in over this alpha range above alphaThreshold, so
     // antialiased edges fade instead of cutting off. 0 = hard mask.
     float    coverage       = 0.0f;
+    std::array<float, 4> joinedRect{};
 
     // 0 = alpha-threshold mask, 1 = ext-background-effect-v1 protocol region
     int                                        maskMode        = 0;

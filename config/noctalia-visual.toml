@@ -1,0 +1,41 @@
+# Merge only these visual keys into Noctalia settings; this is not a complete config.
+[bar.default]
+padding = 12
+widget_spacing = 8
+thickness = 36
+radius = 16
+background_opacity = 0.16
+shadow = false
+contact_shadow = false
+
+[dock]
+cross_axis_padding = 8
+icon_size = 32
+item_spacing = 8
+main_axis_padding = 16
+radius = 16
+background_opacity = 0.16
+shadow = true
+
+[shell]
+corner_radius_scale = 1.25
+
+[shell.panel]
+transparency_mode = "glass"
+borders = false
+shadow = false
+
+[shell.shadow]
+alpha = 0.12
+
+[notification]
+offset_x = 16
+offset_y = 12
+background_opacity = 0.20
+border = false
+
+[osd]
+offset_x = 16
+offset_y = 12
+background_opacity = 0.20
+border = false

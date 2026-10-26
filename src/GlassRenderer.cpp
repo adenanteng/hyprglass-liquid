@@ -446,9 +446,15 @@ void applyGlassEffect(SP<Render::IFramebuffer> sampleFramebuffer, SP<Render::IFr
     // Layers only: bind the temp FBO texture (rendered surface) on texture unit 1.
     // The shader samples it to mask glass to visible content and composite surface on top.
     // Windows pass mask=nullptr so this block is skipped.
+    GLint maskMinFilter = GL_NEAREST, maskMagFilter = GL_NEAREST;
     if (mask && mask->textureId != 0) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(mask->target, mask->textureId);
+        glGetTexParameteriv(mask->target, GL_TEXTURE_MIN_FILTER, &maskMinFilter);
+        glGetTexParameteriv(mask->target, GL_TEXTURE_MAG_FILTER, &maskMagFilter);
+        // Contour searches need subpixel alpha, not nearest-texel steps.
+        glTexParameteri(mask->target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(mask->target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glActiveTexture(GL_TEXTURE0);
     }
 
@@ -532,6 +538,7 @@ void applyGlassEffect(SP<Render::IFramebuffer> sampleFramebuffer, SP<Render::IFr
     // the monitor-sized temp FBO. Windows use useMask=0 (no masking).
     if (mask && mask->textureId != 0) {
         glUniform1i(uniforms.useMask, 1);
+        glUniform4fv(uniforms.joinedRect, 1, mask->joinedRect.data());
         glUniform1i(uniforms.maskTex, 1);
         glUniform2f(uniforms.maskUVOffset,
             static_cast<float>(mask->uvOffset.x),
@@ -552,6 +559,7 @@ void applyGlassEffect(SP<Render::IFramebuffer> sampleFramebuffer, SP<Render::IFr
             static_cast<float>(mask->sampleUVScale.x), static_cast<float>(mask->sampleUVScale.y));
     } else {
         glUniform1i(uniforms.useMask, 0);
+        glUniform4f(uniforms.joinedRect, 0.0f, 0.0f, 0.0f, 0.0f);
         glUniform1f(uniforms.maskAlphaThreshold, 0.001f);
         glUniform1f(uniforms.maskCoverage, 0.0f);
         glUniform1i(uniforms.maskMode, 0);
@@ -589,6 +597,13 @@ void applyGlassEffect(SP<Render::IFramebuffer> sampleFramebuffer, SP<Render::IFr
     g_pHyprOpenGL->scissor(damageExtents.w > 0 && damageExtents.h > 0 ? damageExtents : rawBox);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     g_pHyprOpenGL->scissor(nullptr);
+    if (mask && mask->textureId != 0) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(mask->target, mask->textureId);
+        glTexParameteri(mask->target, GL_TEXTURE_MIN_FILTER, maskMinFilter);
+        glTexParameteri(mask->target, GL_TEXTURE_MAG_FILTER, maskMagFilter);
+        glActiveTexture(GL_TEXTURE0);
+    }
 }
 
 } // namespace GlassRenderer

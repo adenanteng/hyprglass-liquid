@@ -104,7 +104,7 @@ CGlassDecoration::EEnabledResolution CGlassDecoration::resolveEnabled() const {
         // Nothing behind an opaque window is visible, unless the window
         // self-samples: then the glass shows the window's own content, which
         // does change, so the opaque-skip must yield to it.
-        if (skipOpaque && window && window->opaque()) {
+        if (window && window->opaque() && (skipOpaque || WindowGeometry::rimWidth(window) == 0.0f)) {
             const bool         isDark = resolveThemeIsDark();
             const std::string  preset = resolvePresetName();
             const SResolveContext ctx = {preset, isDark, config, g_pGlobalState->customPresets};
@@ -379,7 +379,7 @@ void CGlassDecoration::renderPass(PHLMONITOR monitor, const float& alpha, bool x
     if (!source)
         return;
 
-    auto optBox = WindowGeometry::computeWindowBox(window, monitor);
+    auto optBox = WindowGeometry::computeGlassBox(window, monitor);
     if (!optBox)
         return;
 
@@ -403,7 +403,7 @@ void CGlassDecoration::renderPass(PHLMONITOR monitor, const float& alpha, bool x
     // Hyprland renders internal-fullscreen windows unrounded (dontRound), we need to
     // match, or the glass would show rounded gaps at the screen corners
     const bool fsUnrounded = Fullscreen::controller()->getFullscreenModes(window).internal == Fullscreen::FSMODE_FULLSCREEN;
-    float cornerRadius  = fsUnrounded ? 0.0f : window->rounding() * monitorScale;
+    float cornerRadius  = fsUnrounded ? 0.0f : (window->rounding() + WindowGeometry::rimWidth(window)) * monitorScale;
     float roundingPower = window->roundingPower();
 
     // Resolved here, not inside the cache branch below, so it stays fresh on a
