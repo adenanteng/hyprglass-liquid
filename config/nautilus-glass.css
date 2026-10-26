@@ -1,11 +1,16 @@
-/* Nautilus only: translucent backgrounds, opaque text/icons/thumbnails. */
+/* Nautilus only: a soft base background and a slightly denser sidebar. */
 window.nautilus-window {
-    --window-bg-color: transparent;
-    --view-bg-color: alpha(@view_bg_color, 0.20);
+    --window-bg-color: alpha(@window_bg_color, 0.55);
+    --view-bg-color: transparent;
     --sidebar-bg-color: alpha(@sidebar_bg_color, 0.20);
     --sidebar-backdrop-color: alpha(@sidebar_bg_color, 0.20);
-    --headerbar-bg-color: alpha(@headerbar_bg_color, 0.20);
-    --headerbar-backdrop-color: alpha(@headerbar_bg_color, 0.20);
-    background-color: transparent;
+    --headerbar-bg-color: transparent;
+    --headerbar-backdrop-color: transparent;
+    --sidebar-border-color: transparent;
+    background-color: var(--window-bg-color);
     background-image: none;
+}
+
+window.nautilus-window .sidebar-pane {
+    box-shadow: none;
 }

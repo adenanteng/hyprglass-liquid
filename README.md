@@ -250,7 +250,7 @@ noctalia msg config-reload
 
 ### Optional Nautilus background transparency
 
-[`config/nautilus-glass.css`](config/nautilus-glass.css) targets only `window.nautilus-window`. It sets view, sidebar, and headerbar background paint alpha to **20%**, with a transparent base window. It does not lower whole-window or widget opacity; text, icons, selection states, and thumbnails retain their normal rendering. Stacked widget backgrounds can still produce a different effective opacity.
+[`config/nautilus-glass.css`](config/nautilus-glass.css) targets only `window.nautilus-window`. It paints the base window background at **55% opacity**, with transparent view and headerbar backgrounds. The sidebar adds a subtle **20% tint** over that base (about 64% combined opacity) so it remains slightly denser than the view without a divider line. It does not lower whole-window or widget opacity; text, icons, selection states, and thumbnails retain their normal rendering.
 
 Tested with Nautilus **50.3.1**, GTK **4.22.5**, and libadwaita **1.9.4** in dark mode. Other GTK applications are not styled by this snippet. It uses named colors from the current GTK theme, so it follows palette updates. Without HyprGlass, these areas remain transparent but lose the glass effect.
 
