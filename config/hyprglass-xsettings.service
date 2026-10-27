@@ -1,0 +1,12 @@
+[Unit]
+Description=Publish Noctalia GTK theme changes to XWayland applications
+
+[Service]
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+ExecStart=/usr/bin/env xsettingsd --config=%h/.config/hyprglass-local/xsettingsd.conf
+ExecReload=/usr/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

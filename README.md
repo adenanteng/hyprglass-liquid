@@ -296,21 +296,23 @@ Preserve existing backend preferences for other interfaces. Reload the portal co
 systemctl --user restart xdg-desktop-portal-gtk.service xdg-desktop-portal.service
 ```
 
-GTK3 caches imported CSS palettes in long-lived processes. The supplied user path unit watches Noctalia's generated GTK3 palette and refreshes **only the GTK backend** after every open portal dialog has closed. It leaves an inactive backend inactive; its next activation reads the new palette. This follows actual file changes without modifying Noctalia's packaged templates.
+GTK3 caches imported CSS palettes in long-lived processes. The supplied user path unit watches Noctalia's generated GTK3 and GTK4 palettes. It synchronizes both `settings.ini` files to the resolved Noctalia mode, removes forced dark preferences, and publishes the theme to X11/XWayland through `xsettingsd`. It then refreshes **only the GTK portal backend** after every open portal dialog has closed. It leaves an inactive backend inactive; its next activation reads the new palette. This follows actual file changes without modifying Noctalia's packaged templates.
 
 ```bash
+# Install xsettingsd with your distribution's package manager first.
 mkdir -p "$HOME/.local/bin" "$HOME/.config/systemd/user"
 install -m 644 scripts/refresh-gtk-portal.py "$HOME/.local/bin/hyprglass-refresh-gtk-portal"
-install -m 644 config/hyprglass-gtk-portal.path config/hyprglass-gtk-portal.service \
+install -m 644 config/hyprglass-gtk-portal.path config/hyprglass-gtk-portal.service config/hyprglass-xsettings.service \
     "$HOME/.config/systemd/user/"
 systemctl --user daemon-reload
 systemctl --user enable --now hyprglass-gtk-portal.path
 systemctl --user start hyprglass-gtk-portal.service
+systemctl --user enable --now hyprglass-xsettings.service
 ```
 
-These units target the standard `~/.config` location and require Hyprland's `hyprctl`, Python 3, and a systemd user session. Adjust the path unit if you use another GTK config directory.
+These units target the standard `~/.config` location and require Hyprland's `hyprctl`, Noctalia's IPC, Python 3, `xsettingsd`, and a systemd user session. Install `xsettingsd` in `/usr/bin` or `~/.local/bin`; the unit supports both. Its generated configuration is `~/.config/hyprglass-local/xsettingsd.conf` and does not replace an existing personal xsettingsd configuration. Adjust the path unit if you use another GTK config directory.
 
-Pamac and other GTK3 applications may need reopening after palette changes. GTK3 applications that use an opaque X11 visual can remain opaque despite transparent CSS; native Wayland was used for the Pamac visual check. No whole-window opacity rule is applied. Dialogs drawn internally by an application rather than the GTK portal are outside the refresh service's scope.
+The light/dark mode was verified with GTK3 and GTK4 on both Wayland and X11; a running X11 GTK3 process received theme change notifications. Imported CSS colors can still remain cached in existing application processes, so Pamac and other GTK applications may need reopening after palette changes. Applications with their own appearance setting should use **System/Automatic** to follow the desktop; this integration does not overwrite per-app choices. GTK3 applications that use an opaque X11 visual can remain opaque despite transparent CSS; native Wayland was used for the Pamac visual check. No whole-window opacity rule is applied. Dialogs drawn internally by an application rather than the GTK portal are outside the refresh service's scope.
 
 The live test opened and closed portal dialogs on both themes without selecting files, and inspected Pamac on Wayland without running package transactions. To validate the stylesheet and refresh guard:
 
@@ -324,10 +326,11 @@ The stylesheet check requires PyGObject, GTK3, libhandy 1, the two adw-gtk3 them
 To undo this integration, first disable the watcher:
 
 ```bash
-systemctl --user disable --now hyprglass-gtk-portal.path
+systemctl --user disable --now hyprglass-gtk-portal.path hyprglass-xsettings.service
 systemctl --user stop hyprglass-gtk-portal.service
 rm "$HOME/.config/systemd/user/hyprglass-gtk-portal.path" \
    "$HOME/.config/systemd/user/hyprglass-gtk-portal.service" \
+   "$HOME/.config/systemd/user/hyprglass-xsettings.service" \
    "$HOME/.local/bin/hyprglass-refresh-gtk-portal"
 systemctl --user daemon-reload
 ```
