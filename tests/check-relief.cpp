@@ -47,8 +47,10 @@ void main() {
     glUniform4f(glGetUniformLocation(program,"joinedRect"), joined ? 40 : 0, joinTop, joined ? 320 : 0, joined ? 41 : 0);
     v2("fullSize",W,H); v2("invFullSize",1.0f/W,1.0f/H);
     v2("glassBoxSizePx",W,H); v2("maskUVScale",1,1); v2("sampleUVScale",1,1);
+    v2("glassUVScale",1,1); v2("glassUVOffset",0,0);
     if(panelSlice) {
         v2("fullSize",W*0.5f,H*0.5f); v2("invFullSize",2.0f/W,2.0f/H);
+        v2("glassBoxSizePx",W*0.5f,H*0.5f);
         v2("maskUVScale",0.5f,0.5f); v2("maskUVOffset",0.1f,0.2f);
         v2("sampleUVScale",2,2); v2("sampleUVOffset",-0.2f,-0.4f);
     }

@@ -1,6 +1,8 @@
+diff --git a/src/GlassDecoration.cpp b/src/GlassDecoration.cpp
+index 434fdff..95091d9 100644
 --- a/src/GlassDecoration.cpp
 +++ b/src/GlassDecoration.cpp
-@@ -104,7 +104,7 @@
+@@ -180,7 +180,7 @@ CGlassDecoration::EEnabledResolution CGlassDecoration::resolveEnabled() const {
          // Nothing behind an opaque window is visible, unless the window
          // self-samples: then the glass shows the window's own content, which
          // does change, so the opaque-skip must yield to it.
@@ -9,7 +11,7 @@
              const bool         isDark = resolveThemeIsDark();
              const std::string  preset = resolvePresetName();
              const SResolveContext ctx = {preset, isDark, config, g_pGlobalState->customPresets};
-@@ -379,7 +379,7 @@
+@@ -487,7 +487,7 @@ void CGlassDecoration::renderPass(PHLMONITOR monitor, const float& alpha, bool x
      if (!source)
          return;
  
@@ -18,7 +20,7 @@
      if (!optBox)
          return;
  
-@@ -403,7 +403,7 @@
+@@ -511,7 +511,7 @@ void CGlassDecoration::renderPass(PHLMONITOR monitor, const float& alpha, bool x
      // Hyprland renders internal-fullscreen windows unrounded (dontRound), we need to
      // match, or the glass would show rounded gaps at the screen corners
      const bool fsUnrounded = Fullscreen::controller()->getFullscreenModes(window).internal == Fullscreen::FSMODE_FULLSCREEN;
@@ -27,9 +29,11 @@
      float roundingPower = window->roundingPower();
  
      // Resolved here, not inside the cache branch below, so it stays fresh on a
+diff --git a/src/GlassLayerSurface.cpp b/src/GlassLayerSurface.cpp
+index 79bbb9c..288f9f1 100644
 --- a/src/GlassLayerSurface.cpp
 +++ b/src/GlassLayerSurface.cpp
-@@ -503,6 +503,40 @@
+@@ -622,6 +622,39 @@ void CGlassLayerSurface::compositeAndRestore(PHLMONITOR monitor, float alpha, EM
          .uvScale   = {transformBox.w / monitorWidth, transformBox.h / monitorHeight},
      };
  
@@ -66,13 +70,14 @@
 +            }
 +        }
 +    }
-+
+     float contourThreshold = 0.0f; // mask_threshold as configured, the key of a contour field
+ 
      switch (maskSource) {
-         case EMaskSource::ALPHA_THRESHOLD: {
-             const auto& cfg     = g_pGlobalState->config;
+diff --git a/src/GlassPassElement.cpp b/src/GlassPassElement.cpp
+index 519591a..787ceff 100644
 --- a/src/GlassPassElement.cpp
 +++ b/src/GlassPassElement.cpp
-@@ -41,7 +41,7 @@
+@@ -41,7 +41,7 @@ std::optional<CBox> CGlassPassElement::paddedLogicalBox() const {
          return std::nullopt;
  
      const auto monitor = g_pHyprRenderer->m_renderData.pMonitor.lock();
@@ -81,7 +86,7 @@
      if (!box)
          return std::nullopt;
  
-@@ -81,7 +81,7 @@
+@@ -81,7 +81,7 @@ bool CGlassPassElement::needsLiveBlur() {
      if (!monitor || !window)
          return false;
  
@@ -90,9 +95,11 @@
      if (!box)
          return false;
  
+diff --git a/src/GlassRenderer.cpp b/src/GlassRenderer.cpp
+index 250cfa5..eafa1e8 100644
 --- a/src/GlassRenderer.cpp
 +++ b/src/GlassRenderer.cpp
-@@ -446,9 +446,15 @@
+@@ -545,9 +545,15 @@ void applyGlassEffect(SP<Render::IFramebuffer> sampleFramebuffer, SP<Render::IFr
      // Layers only: bind the temp FBO texture (rendered surface) on texture unit 1.
      // The shader samples it to mask glass to visible content and composite surface on top.
      // Windows pass mask=nullptr so this block is skipped.
@@ -108,7 +115,7 @@
          glActiveTexture(GL_TEXTURE0);
      }
  
-@@ -532,6 +538,7 @@
+@@ -689,6 +695,7 @@ void applyGlassEffect(SP<Render::IFramebuffer> sampleFramebuffer, SP<Render::IFr
      // the monitor-sized temp FBO. Windows use useMask=0 (no masking).
      if (mask && mask->textureId != 0) {
          glUniform1i(uniforms.useMask, 1);
@@ -116,7 +123,7 @@
          glUniform1i(uniforms.maskTex, 1);
          glUniform2f(uniforms.maskUVOffset,
              static_cast<float>(mask->uvOffset.x),
-@@ -552,6 +559,7 @@
+@@ -709,6 +716,7 @@ void applyGlassEffect(SP<Render::IFramebuffer> sampleFramebuffer, SP<Render::IFr
              static_cast<float>(mask->sampleUVScale.x), static_cast<float>(mask->sampleUVScale.y));
      } else {
          glUniform1i(uniforms.useMask, 0);
@@ -124,7 +131,7 @@
          glUniform1f(uniforms.maskAlphaThreshold, 0.001f);
          glUniform1f(uniforms.maskCoverage, 0.0f);
          glUniform1i(uniforms.maskMode, 0);
-@@ -589,6 +597,13 @@
+@@ -733,6 +741,13 @@ void applyGlassEffect(SP<Render::IFramebuffer> sampleFramebuffer, SP<Render::IFr
      g_pHyprOpenGL->scissor(damageExtents.w > 0 && damageExtents.h > 0 ? damageExtents : rawBox);
      glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
      g_pHyprOpenGL->scissor(nullptr);
@@ -138,9 +145,11 @@
  }
  
  } // namespace GlassRenderer
+diff --git a/src/GlassRenderer.hpp b/src/GlassRenderer.hpp
+index c4f098d..ebff6c3 100644
 --- a/src/GlassRenderer.hpp
 +++ b/src/GlassRenderer.hpp
-@@ -69,6 +69,7 @@
+@@ -101,6 +101,7 @@ struct SMaskInfo {
      // Alpha mask only: glass fades in over this alpha range above alphaThreshold, so
      // antialiased edges fade instead of cutting off. 0 = hard mask.
      float    coverage       = 0.0f;
@@ -148,9 +157,11 @@
  
      // 0 = alpha-threshold mask, 1 = ext-background-effect-v1 protocol region
      int                                        maskMode        = 0;
+diff --git a/src/ShaderManager.cpp b/src/ShaderManager.cpp
+index d1ef665..34b542e 100644
 --- a/src/ShaderManager.cpp
 +++ b/src/ShaderManager.cpp
-@@ -68,6 +68,7 @@
+@@ -67,6 +67,7 @@ bool CShaderManager::compileGlassProgram(SGlassProgram& glass, GlassFeatureMask
      glassUniforms.useMask             = glGetUniformLocation(program, "useMask");
      glassUniforms.maskUVOffset        = glGetUniformLocation(program, "maskUVOffset");
      glassUniforms.maskUVScale         = glGetUniformLocation(program, "maskUVScale");
@@ -158,9 +169,11 @@
      glassUniforms.maskAlphaThreshold  = glGetUniformLocation(program, "maskAlphaThreshold");
      glassUniforms.maskCoverage        = glGetUniformLocation(program, "maskCoverage");
      glassUniforms.maskMode            = glGetUniformLocation(program, "maskMode");
+diff --git a/src/ShaderManager.hpp b/src/ShaderManager.hpp
+index ae09c87..835e10a 100644
 --- a/src/ShaderManager.hpp
 +++ b/src/ShaderManager.hpp
-@@ -45,6 +45,7 @@
+@@ -48,6 +48,7 @@ struct SGlassUniforms {
      GLint useMask = -1;
      GLint maskUVOffset = -1;
      GLint maskUVScale = -1;
@@ -168,9 +181,11 @@
      GLint maskAlphaThreshold = -1;
      GLint maskCoverage = -1;
      GLint maskMode = -1;
+diff --git a/src/Shaders.hpp b/src/Shaders.hpp
+index 5f4a0ab..69ad31c 100644
 --- a/src/Shaders.hpp
 +++ b/src/Shaders.hpp
-@@ -78,6 +78,7 @@
+@@ -78,6 +78,7 @@ uniform vec2 maskUVOffset;
  uniform vec2 maskUVScale;
  uniform float maskAlphaThreshold;
  uniform float maskCoverage;    // alpha mask: glass fades in over this alpha range above the threshold (0 = hard mask)
@@ -178,7 +193,7 @@
  uniform int maskMode;          // 0 = alpha threshold, 1 = protocol region
  uniform int regionRectCount;   // 0..64
  uniform vec4 regionRects[64];  // box-local pixels: xy = offset from box top-left, zw = size
-@@ -117,8 +118,17 @@
+@@ -165,13 +166,21 @@ vec2 toTexUV(vec2 wuv) {
  }
  
  vec4 sampleBlurred(vec2 wuv) {
@@ -188,8 +203,14 @@
 +        wuv = (screenUV - maskUVOffset) / maskUVScale;
 +    }
      vec2 tuv = toTexUV(toSampleBoxUV(wuv));
+ #ifdef HYPRGLASS_FEATURE_FROST
+-    tuv = clamp(tuv, 0.001, 0.999);
+-    return mix(texture(tex, tuv), texture(frostTex, tuv), frostAmount);
++    vec4 sampled = mix(texture(tex, clamp(tuv, 0.001, 0.999)), texture(frostTex, clamp(tuv, 0.001, 0.999)), frostAmount);
+ #else
 -    return texture(tex, clamp(tuv, 0.001, 0.999));
 +    vec4 sampled = texture(tex, clamp(tuv, 0.001, 0.999));
+ #endif
 +    // Blur mixes valid pixels with transparent monitor padding; normalize that coverage.
 +    if (useMask == 1 && sampled.a > 0.001)
 +        sampled.rgb /= sampled.a;
@@ -197,7 +218,7 @@
  }
  
  // hash12 from "Hash without Sine" (Dave Hoskins), tuned for integer pixel coordinates
-@@ -248,6 +258,78 @@
+@@ -336,6 +345,78 @@ float lensCornerFade(vec2 uv, float rimPx) {
  // MAIN — Thick-glass refraction model
  // ============================================================================
  
@@ -276,8 +297,8 @@
  void main() {
      vec2 uv = v_texcoord;
  
-@@ -289,6 +371,11 @@
- 
+@@ -387,6 +468,11 @@ void main() {
+ #else
      float cornerSdf    = getCornerSDF(uv);
      float cornerAlpha  = 1.0 - smoothstep(-1.5, 0.5, cornerSdf);
 +    vec2 contourPos = uv * fullSize;
@@ -285,16 +306,23 @@
 +        all(greaterThanEqual(contourPos, joinedRect.xy - vec2(monitorScale))) &&
 +        all(lessThanEqual(contourPos, joinedRect.xy + joinedRect.zw + vec2(monitorScale))))
 +        cornerAlpha = 1.0;
+ #endif
  
-     if (maskMode == 1) {
-         // Subsurface items: the glass box (glassBoxOffsetPx/SizePx) can be
-@@ -328,6 +415,26 @@
+     if (hasMask) {
+@@ -441,8 +527,34 @@ void main() {
      float bevelSdf = roundingPower == 2.0 ? getBevelSDF(uv) : cornerSdf;
      float edgeProximity = min(exp(bevelSdf * invBezelWidthPx), 1.0);
-     vec2 inwardDir = refractionDir(uv);
+     vec2 inwardDir = refractionDir(glassUV);
+-    vec2 posPx = (glassUV - 0.5) * glassBoxSizePx; // pixel-space position for the edge-flow direction below
+ #endif
++#ifdef HYPRGLASS_FEATURE_CONTOUR
++    vec2 edgeNormal = contourOutward;
++#else
 +    vec2 edgeNormal = sdfOutwardNormal(uv);
++#endif
 +    float rimSdf = cornerSdf;
 +    float rimWidthPx = max(bevelSize * monitorScale * 3.0, 1.0);
++#ifndef HYPRGLASS_FEATURE_CONTOUR
 +    if (hasMask) {
 +        float contourWidth = clamp(bevelSize * monitorScale * 3.0, 1.0, 20.0 * monitorScale);
 +        float searchRadius = max(contourWidth * 2.0, bevelSize * monitorScale * 2.0);
@@ -307,15 +335,17 @@
 +        edgeNormal = outward;
 +        rimSdf = -distancePx;
 +    }
++#endif
 +    float rimT = clamp(-rimSdf / rimWidthPx, 0.0, 1.0);
 +    // One rounded shoulder, with a smooth transition into the flat body.
 +    float rimCurve = 9.48148148 * rimT * pow(1.0 - rimT, 3.0);
 +    if (hasMask)
 +        edgeProximity = rimCurve;
-     vec2 posPx = (uv - 0.5) * fullSize; // pixel-space position for the edge-flow direction below
++    vec2 posPx = (glassUV - 0.5) * glassBoxSizePx;
  
+ #ifdef HYPRGLASS_FEATURE_LENS_EDGE
      // ========================================
-@@ -338,6 +445,8 @@
+@@ -495,6 +607,8 @@ void main() {
      // beyond the window boundary.
      // ========================================
      float refractionPx = refractionStrength * 50.0;
@@ -324,7 +354,7 @@
      float lensFalloff = edgeProximity;
      if (refractionSpread < 0.999) {
          // rim-only lens: window the exponential tail so the centre stays flat
-@@ -346,6 +455,9 @@
+@@ -503,6 +617,9 @@ void main() {
          lensFalloff = mix(edgeProximity * tailWindow, edgeProximity, refractionSpread);
      }
      float refractionMag = lensFalloff * refractionPx;
@@ -332,15 +362,15 @@
 +        refractionMag = rimCurve * refractionPx;
 +    }
      vec2 dir = inwardDir;
-     if (refractionFlow > 0.001) {
-         // pull along the edges instead of toward the centre
-@@ -370,13 +482,20 @@
-     // ========================================
+ #ifndef HYPRGLASS_FEATURE_CONTOUR
+     // (a traced outline already pulls along each edge's own normal)
+@@ -532,13 +649,20 @@ void main() {
      vec2 domeUV = vec2(0.0);
+ #ifndef HYPRGLASS_FEATURE_CONTOUR   // a dome needs one centre: a traced outline has one per card
      if (lensDistortion > 0.001) {
--        vec2 c = (uv - 0.5) * 2.0;
+-        vec2 c = (glassUV - 0.5) * 2.0;
 +        // Attached shell surfaces share one monitor-space lens, including across their join.
-+        vec2 lensUV = hasMask ? uv * maskUVScale + maskUVOffset : uv;
++        vec2 lensUV = hasMask ? uv * maskUVScale + maskUVOffset : glassUV;
 +        vec2 c = (lensUV - 0.5) * 2.0;
          vec2 dGrad = vec2(
              -4.0 * c.x * (1.0 - c.y * c.y),
@@ -356,9 +386,9 @@
 +        }
 +        domeUV = dGrad * lensScalePx * lensFade * invFullSize;
      }
+ #endif
  
-     // ========================================
-@@ -429,6 +548,15 @@
+@@ -605,6 +729,15 @@ void main() {
      // ========================================
      color = mix(color, tintColor, tintAlpha);
  
@@ -371,10 +401,21 @@
 +    vec3 reflectionHue = mix(vec3(1.0), reflectionMax > 0.001 ? color / reflectionMax : vec3(1.0), 0.25);
 +    color = mix(color, reflectionHue, reflectionAmount);
 +
-     // grain-free copy for the rim tints, so the grain does not speckle their hue
-     vec3 tintSource = color;
+ #ifdef HYPRGLASS_FEATURE_LENS_EDGE
+     // ========================================
+     // RIM REFLECTION — the rim mirrors what is around the glass, as much as
+@@ -625,7 +758,9 @@ void main() {
+         float fresnel  = straight + (1.0 - straight) * pow(1.0 - clamp(lensNormal.y, 0.0, 1.0), 5.0);
+         // padding past the screen edge is cleared to transparent: mirror only what was sampled
+         float amount   = clamp(lensReflection * fresnel * seen.a * lensCornerWeight, 0.0, 1.0);
+-        color = mix(color, seen.rgb / max(seen.a, 0.001), amount);
++        // Layer samples are already normalized for transparent monitor padding.
++        vec3 reflectedRGB = hasMask ? seen.rgb : seen.rgb / max(seen.a, 0.001);
++        color = mix(color, reflectedRGB, amount);
+     }
+ #endif
  
-@@ -443,34 +571,48 @@
+@@ -643,38 +778,48 @@ void main() {
      // ========================================
      // BEVEL — thin lit line hugging the edge, brightest on the side facing the light
      // ========================================
@@ -397,7 +438,11 @@
 +        float ring = (1.0 - smoothstep(-core, 0.0, rimSdf)) * smoothstep(-tail, -core, rimSdf);
  
          // lit side faces the light, the far side fades out and can be shadowed
+-#ifdef HYPRGLASS_FEATURE_CONTOUR
+-        float facing = clamp(dot(contourOutward, lightDir(bevelAngle)) * 0.5 + 0.5, 0.0, 1.0);
+-#else
 -        float facing = clamp(dot(sdfOutwardNormal(uv), lightDir(bevelAngle)) * 0.5 + 0.5, 0.0, 1.0);
+-#endif
 +        float facing = clamp(dot(edgeNormal, lightDir(bevelAngle)) * 0.5 + 0.5, 0.0, 1.0);
  
 -        vec3 bevelLight = vec3(1.0);
@@ -433,7 +478,7 @@
          vec3 fresnelLight = vec3(1.0);
          if (fresnelColorAlpha > 0.001) fresnelLight = mix(vec3(1.0), fresnelColor, fresnelColorAlpha);   // chosen colour, then the tint below
          if (fresnelTint > 0.001) {
-@@ -478,7 +620,8 @@
+@@ -682,7 +827,8 @@ void main() {
              float maxC = max(max(tintSource.r, tintSource.g), tintSource.b);
              fresnelLight = mix(fresnelLight, maxC > 0.001 ? tintSource / maxC : vec3(1.0), fresnelTint);
          }
@@ -443,9 +488,9 @@
      }
  
      // ========================================
-@@ -493,14 +636,15 @@
-             specT = clamp(0.5 + dot(uv - 0.5, L), 0.0, 1.0);
+@@ -702,14 +848,15 @@ void main() {
          }
+ #endif
          float topBias = pow(specT, 2.0);
 -        float spec = topBias * edgeProximity * edgeProximity * specularStrength * 0.08;
 -        color += vec3(1.0, 0.99, 0.97) * spec;
@@ -459,10 +504,10 @@
      // ========================================
 -    {
 +    if (!hasMask) {
-         float bottomBias = pow(uv.y, 2.0);
-         float shadow = bottomBias * edgeProximity * edgeProximity * 0.06;
-         color *= 1.0 - shadow;
-@@ -522,6 +666,10 @@
+ #ifdef HYPRGLASS_FEATURE_CONTOUR
+         // the edge facing away from the light: 1 at the bottom, a quarter at the sides, like a box
+         float bottomBias = pow(0.5 + 0.5 * contourOutward.y, 2.0);
+@@ -761,6 +908,10 @@ void main() {
          vec3 compRGB = compA > 0.001
              ? (surfRGB * surfA + color * glassA * (1.0 - surfA)) / compA
              : vec3(0.0);
@@ -473,6 +518,8 @@
  
          // Hyprland's compositor expects premultiplied alpha (blend GL_ONE, GL_ONE_MINUS_SRC_ALPHA).
          fragColor = vec4(compRGB * compA, compA);
+diff --git a/src/WindowGeometry.hpp b/src/WindowGeometry.hpp
+index 581e72d..ee90fea 100644
 --- a/src/WindowGeometry.hpp
 +++ b/src/WindowGeometry.hpp
 @@ -1,12 +1,21 @@
@@ -497,7 +544,7 @@
  [[nodiscard]] inline std::optional<CBox> computeWindowBox(PHLWINDOW window, PHLMONITOR monitor) {
      if (!window || !monitor)
          return std::nullopt;
-@@ -24,6 +33,13 @@
+@@ -24,6 +33,13 @@ namespace WindowGeometry {
      return box;
  }
  
@@ -511,7 +558,7 @@
  // Global-logical box (no monitor translate, no scale) — layout coordinates,
  // not the monitor-local physical pixels computeWindowBox() returns. Shared by
  // CGlassDecoration::damageEntire() (paddingPx = GlassRenderer::SAMPLE_PADDING_PX)
-@@ -44,7 +60,7 @@
+@@ -44,7 +60,7 @@ namespace WindowGeometry {
  
      const auto monitor = window->m_monitor.lock();
      const float scale = monitor ? monitor->m_scale : 1.0f;

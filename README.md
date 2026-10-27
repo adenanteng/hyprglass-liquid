@@ -17,9 +17,9 @@ Refraction, soft highlights, and continuous panel contours — while opaque appl
 
 ---
 
-This is a desktop-focused modification of [HyprGlass](https://github.com/hyprnux/hyprglass), based on its **v0.10.0** source. It refines the glass treatment around application windows and Noctalia surfaces, with particular attention to the junction between a top bar and its attached dropdown.
+This is a desktop-focused modification of [HyprGlass](https://github.com/hyprnux/hyprglass), based on its **v0.11.0** source from the stable `hyprland-0.56` branch. It refines the glass treatment around application windows and Noctalia surfaces, with particular attention to the junction between a top bar and its attached dropdown.
 
-The `liquid-glass` branch contains this modification and retains the upstream **v0.10.0** commit history (`84c1a5ab217101a317d4edaab7fba2efcc1bf346`). The fork's `main` branch follows upstream and does not contain these customizations. Clone `liquid-glass` explicitly until it is selected as the repository's default branch.
+The `liquid-glass` branch contains this modification and retains the upstream **v0.11.0** commit history (`7fc328064c63d9fbaaac8d8204eadf85dcdeae19`). The fork's `main` branch follows upstream and does not contain these customizations. Clone `liquid-glass` explicitly until it is selected as the repository's default branch.
 
 The visual direction is inspired by Liquid Glass. This project is independent of Apple and does not reproduce the macOS renderer.
 
@@ -49,8 +49,8 @@ The following describes the configuration tested during development, not a suppo
 | --- | --- |
 | Operating system | Manjaro Linux |
 | Hyprland | **0.56.2** |
-| HyprGlass source baseline | **v0.10.0** |
-| Local plugin version string | `0.10.0-optical-rim` |
+| HyprGlass source baseline | **v0.11.0** |
+| Local plugin version string | `0.11.0-optical-rim` |
 | Noctalia | **5.2.1**, native shell |
 | Configuration format | Hyprland Lua |
 | Attached-panel layout | Top bar with an attached dropdown |
@@ -87,7 +87,7 @@ hyprctl version
 pkg-config --modversion hyprland
 
 make clean
-make -j2 HYPRGLASS_VERSION=0.10.0-optical-rim
+make -j2 HYPRGLASS_VERSION=0.11.0-optical-rim
 ```
 
 The output is `hyprglass.so`. Confirm that the installed headers target the running compositor before proceeding. Version labels alone do not prove that every ABI dependency matches.
@@ -163,7 +163,7 @@ hyprctl configerrors
 Expected plugin status:
 
 ```text
-hyprglass 0.10.0-optical-rim: active
+hyprglass 0.11.0-optical-rim: active
   version check: match
   shaders: ready
 ```
@@ -211,7 +211,7 @@ dofile(config_root .. "/hypr/hyprglass-local.lua")
 
 Replace existing glass presets and conflicting Noctalia layer rules rather than stacking duplicate definitions. The native-blur snippet disables global compositor blur, so other applications that rely on it will also lose that built-in blur.
 
-The configuration enables the exterior window rim only for `0.10.0-optical-rim`. With the stock plugin, it restores a conventional border and skips opaque windows. Whole-window opacity is not reduced by these snippets.
+The configuration enables the exterior window rim only for `0.11.0-optical-rim`. With the stock plugin, it restores a conventional border and skips opaque windows. Whole-window opacity is not reduced by these snippets.
 
 ### Optical balance
 
@@ -290,7 +290,7 @@ The Python fixture uses mocked compositor commands and temporary directories. It
 ### Shader validation and rendering
 
 ```bash
-glslangValidator -S frag tests/relief.frag
+python3 tests/check-shaders.py
 
 g++ -std=c++17 tests/check-relief.cpp -o tests/check-relief \
     $(pkg-config --cflags --libs egl glesv2)
@@ -298,6 +298,8 @@ g++ -std=c++17 tests/check-relief.cpp -o tests/check-relief \
 LIBGL_ALWAYS_SOFTWARE=1 tests/check-relief \
     tests/original.frag tests/relief.frag tests/contour-test
 ```
+
+The shader check compiles all 16 combinations of the upstream lens-edge, focus-light, frost, and contour features, plus the five auxiliary shaders. It also checks that the render fixture matches the embedded shader.
 
 The offscreen EGL/GLES fixture checks:
 
@@ -317,7 +319,7 @@ The offscreen EGL/GLES fixture checks:
 
 The last fixture fails with the previous shader and passes with this revision. The fixture emits PPM comparison images, which are ignored by Git.
 
-`tests/relief.frag` is a snapshot of the embedded `liquidglass.frag` shader in `src/Shaders.hpp`. Keep it synchronized when editing that shader; the test does not extract it automatically.
+`tests/relief.frag` is a snapshot of the embedded `liquidglass.frag` shader in `src/Shaders.hpp`. Keep it synchronized when editing that shader; `check-shaders.py` fails if it drifts.
 
 ### Live checks
 
@@ -327,9 +329,13 @@ hyprctl configerrors
 hyprctl getoption decoration:blur:enabled
 ```
 
-The tested session reported an active plugin, matching version check, ready shaders, no configuration errors, and disabled native blur. The loader was exercised in the running session; a fresh login cycle has not yet been verified.
+The v0.11.0 port was built against Hyprland 0.56.2 and loaded in the tested session. The session reported an active plugin, matching version check, ready shaders, no configuration errors, and disabled native blur. The attached calendar panel was visually compared with the previous build on an empty workspace. The loader was exercised in the running session; a fresh login cycle has not yet been verified.
 
 ## Updates and maintenance
+
+This branch includes upstream `hyprland-0.56` through `7fc328064c63d9fbaaac8d8204eadf85dcdeae19` (v0.11.0). Follow the stable branch for the installed Hyprland minor version; upstream `main` may include changes intended for another compositor revision. The new optional lens-edge, focus-light, frost, and GPU-contour features are available, but the supplied desktop profile keeps its existing settings and optical treatment.
+
+When upgrading from the v0.10.0 local build, update the plugin-version guard in the desktop config and replace the loader along with the binary. Both now expect `0.11.0-optical-rim`. Keep the previous uniquely named binary and configuration backups until the new build has been verified.
 
 | Update | What to do |
 | --- | --- |
@@ -348,7 +354,7 @@ Keep the previously working binary until its replacement has been verified. Nati
 | Local effect disappears after a compositor update | Read the loader log. Rebuild for the new ABI rather than copying the old ABI value into the metadata file. |
 | `Paused (duplicate)` or the wrong plugin responds | Inspect `hyprctl -j plugin list`. Unload the extra binary by its exact path and avoid simultaneous startup loaders. |
 | Loader cannot unload the managed plugin | Check its installation path against `stock_path` in the loader. |
-| Borders return to a conventional appearance | Confirm the active version is `0.10.0-optical-rim`; stock-plugin fallback intentionally restores a normal border. |
+| Borders return to a conventional appearance | Confirm the active version is `0.11.0-optical-rim`; stock-plugin fallback intentionally restores a normal border. |
 | Panels look opaque or double-bordered | Check Noctalia's panel transparency and border settings, plus duplicate layer rules or presets. |
 | Some application backgrounds stay solid | This is expected for opaque applications. The plugin cannot recover separate background/text/video layers from a flattened opaque surface. |
 | Shader fixture cannot initialize EGL | Check Mesa surfaceless EGL support and the EGL/GLES development environment. This fixture uses software rendering, not the active desktop renderer. |

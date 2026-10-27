@@ -16,13 +16,13 @@ if pathlib.Path(sys.argv[0]).name == 'hyprpm':
 elif args == ['-j', 'version']: print(json.dumps({'abiHash': os.environ['MOCK_ABI']}))
 elif args == ['-j', 'plugin', 'list']:
     value = state.read_text() if state.exists() else ''
-    print(json.dumps([{'name': 'hyprglass', 'version': '0.10.0-optical-rim' if value == 'local' else '0.10.0'}] if value else []))
+    print(json.dumps([{'name': 'hyprglass', 'version': '0.11.0-optical-rim' if value == 'local' else '0.10.0'}] if value else []))
 elif args[:2] == ['plugin', 'unload']:
     state.unlink(missing_ok=True)
 elif args[:2] == ['plugin', 'load']:
     if os.environ.get('MOCK_FAIL') == '1': sys.exit(1)
     state.write_text('local')
-elif args == ['hyprglass', 'status'] and state.exists() and state.read_text() == 'local': print('hyprglass 0.10.0-optical-rim: active\\nshaders: ready')
+elif args == ['hyprglass', 'status'] and state.exists() and state.read_text() == 'local': print('hyprglass 0.11.0-optical-rim: active\\nshaders: ready')
 '''
 
 class LoaderTest(unittest.TestCase):

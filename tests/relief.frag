@@ -36,7 +36,7 @@ uniform float fresnelStrength;
 uniform float specularStrength;
 uniform float glassOpacity;
 uniform float edgeThickness;
-uniform float invBezelWidthPx; // = 1.0 / (edgeThickness * minDim), hoisted per-draw
+uniform float invBezelWidthPx; // = 1.0 / (edgeThickness * minDim), hoisted per-draw (minDim: the glass box's smaller side)
 uniform vec3 tintColor;
 uniform float tintAlpha;
 uniform float lensDistortion;
@@ -76,14 +76,19 @@ uniform int maskMode;          // 0 = alpha threshold, 1 = protocol region
 uniform int regionRectCount;   // 0..64
 uniform vec4 regionRects[64];  // box-local pixels: xy = offset from box top-left, zw = size
 
-// Subsurface item glass only: the rounded-box SDF (getCornerSDF below) is
-// evaluated over this sub-rect of the drawn box instead of the full box —
-// the item's blur-region extents, which can be smaller than its own surface
-// box (e.g. a capsule pill inside a wider hit-test area). Box-local pixels,
-// same space as regionRects. Windows and alpha-mask layers pass offset (0,0)
-// and size == fullSize, so the SDF is unchanged from the old whole-box math.
+// The glass shape: the outline, bezel, lens, refraction centre and lighting
+// all follow this sub-rect of the drawn box. Smaller than the drawn box only
+// for subsurface items (e.g. a capsule pill inside a wider hit-test area) and
+// layers with a fixed shape. Box-local pixels, same space as regionRects.
+// Windows and other layers pass offset (0,0) and size == fullSize.
 uniform vec2 glassBoxOffsetPx;
 uniform vec2 glassBoxSizePx;
+// glassUV = uv * glassUVScale - glassUVOffset: 0..1 across the glass box.
+// = fullSize / glassBoxSizePx and glassBoxOffsetPx / glassBoxSizePx, hoisted
+// per-draw; exactly (1,1) and (0,0) when the glass box is the whole box, so
+// glassUV == uv bit for bit for windows and layers.
+uniform vec2 glassUVScale;
+uniform vec2 glassUVOffset;
 
 // Maps this fragment's own box UV into the sample texture's normalized space
 // before uvPadding is applied. Identity (offset 0, scale 1) unless the sample
@@ -92,6 +97,49 @@ uniform vec2 glassBoxSizePx;
 // bounding box (see GlassRenderer::sampleBackground callers in GlassLayerSurface.cpp).
 uniform vec2 sampleUVOffset;
 uniform vec2 sampleUVScale;
+
+#ifdef HYPRGLASS_FEATURE_LENS_EDGE
+uniform float lensHeightPx;          // edge_height in framebuffer px, > 0
+uniform float lensReflection;        // fresnel_reflection, 0..1
+uniform float lensReflectionReachPx; // farthest the rim mirrors outside the glass, inside the sample padding
+
+const float LENS_IOR = 1.5;
+// refractive index spread per unit of chromatic_aberration: red below LENS_IOR, blue above
+const float LENS_DISPERSION = 0.25;
+// refraction_strength that bends by exactly what Snell's law gives
+const float LENS_REFERENCE_STRENGTH = 0.6;
+#endif
+
+#ifdef HYPRGLASS_FEATURE_FOCUS_LIGHT
+uniform float focusLight;           // focus_light times the focus fade, > 0
+uniform vec3  focusLightColor;
+uniform float focusLightColorAlpha;
+
+// Logical px, so the light looks the same on every monitor scale.
+const float FOCUS_LIGHT_LINE_DEPTH = 1.0;  // the bright line peaks this far in from the edge
+const float FOCUS_LIGHT_LINE_WIDTH = 1.0;
+const float FOCUS_LIGHT_SHEEN_FALLOFF = 4.0; // the soft sheen inside it fades out over ~3 of these
+const float FOCUS_LIGHT_SHEEN = 0.3;       // sheen brightness, relative to the line
+const float FOCUS_LIGHT_FLOOR = 0.5;       // the side facing away from bevel_angle keeps this much
+const float FOCUS_LIGHT_REACH = 24.0;      // deeper, the light is under a third of a colour step: skipped
+#endif
+
+#ifdef HYPRGLASS_FEATURE_FROST
+uniform sampler2D frostTex;  // tex blurred further, at half its size: same UVs as tex
+uniform float frostAmount;   // frost times its ease, > 0
+
+const float FROST_SATURATION_LIFT = 0.35; // frosted glass reads slightly more colourful ...
+const float FROST_DIM = 0.10;             // ... and slightly deeper, at full amount
+#endif
+
+#ifdef HYPRGLASS_FEATURE_CONTOUR
+// Layers with mask_mode = contour: the edge follows the outline the app draws, read
+// from a distance field (Contour.hpp) instead of the layer's rectangle.
+uniform highp sampler2D contourTex; // r: signed distance to the outline in px (negative inside), gb: its gradient
+uniform vec2 contourUVScale;      // box UV -> field UV: the field covers whole texels, the box need not
+uniform float contourReferencePx; // the bezel is a fraction of this, not of the layer's short side
+uniform float contourReachPx;     // where the field stops; the edge effects fade out before it
+#endif
 
 in vec2 v_texcoord;
 layout(location = 0) out vec4 fragColor;
@@ -117,7 +165,11 @@ vec4 sampleBlurred(vec2 wuv) {
         wuv = (screenUV - maskUVOffset) / maskUVScale;
     }
     vec2 tuv = toTexUV(toSampleBoxUV(wuv));
+#ifdef HYPRGLASS_FEATURE_FROST
+    vec4 sampled = mix(texture(tex, clamp(tuv, 0.001, 0.999)), texture(frostTex, clamp(tuv, 0.001, 0.999)), frostAmount);
+#else
     vec4 sampled = texture(tex, clamp(tuv, 0.001, 0.999));
+#endif
     // Blur mixes valid pixels with transparent monitor padding; normalize that coverage.
     if (useMask == 1 && sampled.a > 0.001)
         sampled.rgb /= sampled.a;
@@ -146,7 +198,7 @@ float lpNorm(vec2 v, float p, float invP) {
 // Quadrant lookup for the per-corner radius. p is measured from the box
 // center (as getRoundedBoxSDF/getBevelSDF compute it below): negative y is
 // the top half (v_texcoord grows downward — see the specular highlight's
-// 1.0 - uv.y), negative x is the left half. cornerRadii is (top-left,
+// 1.0 - glassUV.y), negative x is the left half. cornerRadii is (top-left,
 // top-right, bottom-right, bottom-left).
 float pickCornerRadius(vec2 p, vec4 cornerRadii) {
     float top    = p.x < 0.0 ? cornerRadii.x : cornerRadii.y;
@@ -208,22 +260,22 @@ float getBevelSDF(vec2 uv) {
 
 // ============================================================================
 // REFRACTION DIRECTION
-// Pixel-space direction toward window center — perfectly smooth everywhere,
+// Pixel-space direction toward the glass box center — perfectly smooth everywhere,
 // no SDF gradient needed (optional edge-following blend below). On straight edges the perpendicular pixel distance
 // dominates, giving approximately edge-normal direction. At corners it
 // naturally follows the diagonal.
 // ============================================================================
 
-vec2 refractionDir(vec2 uv) {
-    vec2 toCenterPx = (vec2(0.5) - uv) * fullSize;
+vec2 refractionDir(vec2 glassUV) {
+    vec2 toCenterPx = (vec2(0.5) - glassUV) * glassBoxSizePx;
     float len = length(toCenterPx);
     return len > 0.1 ? toCenterPx / len : vec2(0.0);
 }
 
-// Smooth edge-following field: points into the box, hugging each edge's normal
+// Smooth edge-following field: points into the glass box, hugging each edge's normal
 // away from the corners and blending crease-free through the diagonals.
-vec2 edgeDir(vec2 posPx) {
-    vec2 halfSize = fullSize * 0.5;
+vec2 edgeDir(vec2 posPx) {   // posPx: from the glass box center
+    vec2 halfSize = max(glassBoxSizePx * 0.5, vec2(0.5)); // a sub-pixel glass box rounds to 0
     vec2 n = abs(posPx) / halfSize;
     vec2 g = sign(posPx) * pow(n, vec2(7.0)) / halfSize;
     float len = length(g);
@@ -246,6 +298,41 @@ vec2 sdfOutwardNormal(vec2 uv) {
     float len = length(grad);
     return len > 0.0 ? grad / len : vec2(0.0, -1.0);
 }
+
+#ifdef HYPRGLASS_FEATURE_LENS_EDGE
+// ============================================================================
+// LENS EDGE
+// The rim (the edge width) is a convex glass wall edge_height tall: a quarter
+// ellipse across its width, vertical at the edge and flat from its inner side
+// on, so the centre is not bent at all. A vertical eye ray refracts where it
+// enters the rim (Snell's law) and runs down through the glass to the backdrop.
+// ============================================================================
+
+// The edge distance main() uses (bevelSdf), so the rim normal has no crease either.
+float lensEdgeSDF(vec2 uv) {
+    return roundingPower == 2.0 ? getBevelSDF(uv) : getCornerSDF(uv);
+}
+
+// Inward distance, in px, between where the eye ray enters the glass and where
+// it meets the backdrop: n is the surface normal as (inward, up), surfacePx the
+// glass height there. gain scales it, capPx bounds it smoothly.
+float lensBendPx(vec2 n, float surfacePx, float ior, float gain, float capPx) {
+    vec2 ray = refract(vec2(0.0, -1.0), n, 1.0 / ior);
+    float runPx = surfacePx * ray.x / max(-ray.y, 1e-3);
+    return capPx * tanh(clamp(gain * runPx / capPx, -8.0, 8.0));
+}
+
+// At a square or tight corner the rim normal turns all the way round within a
+// few pixels, so every ray there bends toward one point (a dark curl) and the
+// reflection swirls. Fades both out near a corner whose radius is under the rim width.
+float lensCornerFade(vec2 uv, float rimPx) {
+    vec2  halfBox    = glassBoxSizePx * 0.5;
+    vec2  fromCenter = uv * fullSize - glassBoxOffsetPx - halfBox;
+    float radius     = min(pickCornerRadius(fromCenter, radii), min(halfBox.x, halfBox.y));
+    float toCorner   = length(max(halfBox - abs(fromCenter), 0.0));
+    return mix(smoothstep(0.0, rimPx, toCorner), 1.0, clamp(radius / rimPx, 0.0, 1.0));
+}
+#endif
 
 // ============================================================================
 // MAIN — Thick-glass refraction model
@@ -362,6 +449,16 @@ void main() {
         }
     }
 
+#ifdef HYPRGLASS_FEATURE_CONTOUR
+    // The traced outline replaces the layer box. The mask above already limits the glass
+    // to the visible content, so the outline only shapes the edge effects, not the cut.
+    vec4  contourSample  = texture(contourTex, uv * contourUVScale);
+    float cornerSdf      = contourSample.r;
+    float cornerAlpha    = 1.0;
+    float contourGradLen = length(contourSample.gb);
+    // zero where the field is flat (deep inside, or past its reach): no edge there
+    vec2  contourOutward = contourGradLen > 0.05 ? contourSample.gb / contourGradLen : vec2(0.0);
+#else
     float cornerSdf    = getCornerSDF(uv);
     float cornerAlpha  = 1.0 - smoothstep(-1.5, 0.5, cornerSdf);
     vec2 contourPos = uv * fullSize;
@@ -369,11 +466,12 @@ void main() {
         all(greaterThanEqual(contourPos, joinedRect.xy - vec2(monitorScale))) &&
         all(lessThanEqual(contourPos, joinedRect.xy + joinedRect.zw + vec2(monitorScale))))
         cornerAlpha = 1.0;
+#endif
 
-    if (maskMode == 1) {
-        // Subsurface items: the glass box (glassBoxOffsetPx/SizePx) can be
-        // smaller than the item's own drawn box/region — e.g. a capsule glass
-        // shape inside a rectangular blur region. Outside it, fall back to the
+    if (hasMask) {
+        // Layers and subsurface items: the glass box (glassBoxOffsetPx/SizePx) can be
+        // smaller than the drawn box/region — e.g. a capsule glass shape inside a
+        // rectangular blur region, or a layer's fixed shape. Outside it, fall back to the
         // plain surface pixel instead of dropping it (a hard discard here would
         // silently delete client content, like an icon, that simply isn't under
         // the glass). cornerAlpha fades smoothly across the boundary (the same
@@ -385,32 +483,52 @@ void main() {
             return;
         }
     } else {
-        // Windows, and alpha-mask layers: no surface pixel to fall back to
-        // outside the glass shape, so this is exactly the old hard-edged cutoff.
+        // Windows: no surface pixel to fall back to outside the glass shape.
         if (cornerSdf > 0.0) discard;
         if (cornerAlpha < 0.001) discard;
     }
 
-    float minDim = min(fullSize.x, fullSize.y);
-    float bezelWidthPx = edgeThickness * minDim;
+    // Position within the glass box: everything shaped by the glass (bezel, lens,
+    // refraction centre, lighting) follows it, not the drawn box.
+    vec2 glassUV = uv * glassUVScale - glassUVOffset;
+#ifdef HYPRGLASS_FEATURE_CONTOUR
+    float minDim = contourReferencePx;
+#else
+    float minDim = min(glassBoxSizePx.x, glassBoxSizePx.y);
+#endif
+    float bezelWidthPx = max(edgeThickness * minDim, 1e-4); // same floor as invBezelWidthPx
 
     // ========================================
     // EDGE PROXIMITY + DIRECTION
     // edgeProximity: 1.0 at boundary, exponential decay inward
     // inwardDir: pixel-space direction toward center (smooth everywhere)
-    // Clamped to 1.0: cornerSdf can be positive here (maskMode==1's glass box
+    // Clamped to 1.0: cornerSdf can be positive here (a layer or item glass box
     // can be smaller than fullSize, so fragments just outside it still reach
     // this code with cornerAlpha > 0.001), and exp() of a positive value would
     // otherwise overshoot every effect that scales off edgeProximity.
     // ========================================
     // crease-free bevel distance, so the edge has no seam along the corner diagonals;
     // it assumes circular corners, so a superellipse outline keeps the exact SDF
+#ifdef HYPRGLASS_FEATURE_CONTOUR
+    // The field is smoothed, so it has no corner seam to avoid. Its reach is the end of the
+    // data: the window takes the effects to zero before it, rather than cutting them off.
+    float bevelSdf = cornerSdf;
+    float edgeProximity = min(exp(bevelSdf * invBezelWidthPx), 1.0) *
+                          (1.0 - smoothstep(0.5 * contourReachPx, contourReachPx, -bevelSdf));
+    vec2 inwardDir = -contourOutward;
+#else
     float bevelSdf = roundingPower == 2.0 ? getBevelSDF(uv) : cornerSdf;
     float edgeProximity = min(exp(bevelSdf * invBezelWidthPx), 1.0);
-    vec2 inwardDir = refractionDir(uv);
+    vec2 inwardDir = refractionDir(glassUV);
+#endif
+#ifdef HYPRGLASS_FEATURE_CONTOUR
+    vec2 edgeNormal = contourOutward;
+#else
     vec2 edgeNormal = sdfOutwardNormal(uv);
+#endif
     float rimSdf = cornerSdf;
     float rimWidthPx = max(bevelSize * monitorScale * 3.0, 1.0);
+#ifndef HYPRGLASS_FEATURE_CONTOUR
     if (hasMask) {
         float contourWidth = clamp(bevelSize * monitorScale * 3.0, 1.0, 20.0 * monitorScale);
         float searchRadius = max(contourWidth * 2.0, bevelSize * monitorScale * 2.0);
@@ -423,13 +541,57 @@ void main() {
         edgeNormal = outward;
         rimSdf = -distancePx;
     }
+#endif
     float rimT = clamp(-rimSdf / rimWidthPx, 0.0, 1.0);
     // One rounded shoulder, with a smooth transition into the flat body.
     float rimCurve = 9.48148148 * rimT * pow(1.0 - rimT, 3.0);
     if (hasMask)
         edgeProximity = rimCurve;
-    vec2 posPx = (uv - 0.5) * fullSize; // pixel-space position for the edge-flow direction below
+    vec2 posPx = (glassUV - 0.5) * glassBoxSizePx;
 
+#ifdef HYPRGLASS_FEATURE_LENS_EDGE
+    // ========================================
+    // LENS EDGE REFRACTION (see lensBendPx). Replaces the soft edge refraction
+    // below: refraction_flow and refraction_spread do not apply. Each channel has
+    // its own refractive index, so the rainbow shows only where the rim is steep.
+    // ========================================
+    float rimDepthPx = max(-bevelSdf, 0.0);
+    bool  inRim      = rimDepthPx < bezelWidthPx;
+    vec2  offsetR    = vec2(0.0);
+    vec2  offsetG    = vec2(0.0);
+    vec2  offsetB    = vec2(0.0);
+    vec2  lensInward    = inwardDir;
+    vec2  lensNormal    = vec2(0.0, 1.0); // (inward, up)
+    float lensSurfacePx = 0.0;            // glass height over the backdrop here
+    float lensCornerWeight = 1.0;
+    if (inRim) {
+        float u    = 1.0 - rimDepthPx / bezelWidthPx; // 1 at the edge, 0 at the rim's inner side
+        float rise = sqrt(max(1.0 - u * u, 0.0));
+        lensSurfacePx = lensHeightPx * rise;
+        lensNormal    = normalize(vec2(-u / bezelWidthPx, rise / max(lensHeightPx, 1e-3)));
+
+#ifdef HYPRGLASS_FEATURE_CONTOUR
+        lensInward = inwardDir;
+#else
+        vec2 grad = vec2(lensEdgeSDF(uv + vec2(invFullSize.x, 0.0)) - bevelSdf,
+                         lensEdgeSDF(uv + vec2(0.0, invFullSize.y)) - bevelSdf);
+        float gradLen = length(grad);
+        if (gradLen > 1e-4) lensInward = -grad / gradLen;
+
+        lensCornerWeight = lensCornerFade(uv, bezelWidthPx);
+#endif
+        float gain   = refractionStrength / LENS_REFERENCE_STRENGTH * lensCornerWeight;
+        vec2  inwardStep = lensInward * invFullSize;
+        offsetG = inwardStep * lensBendPx(lensNormal, lensSurfacePx, LENS_IOR, gain, bezelWidthPx);
+        offsetR = offsetG;
+        offsetB = offsetG;
+        if (chromaticAberration > 0.001) {
+            float spread = chromaticAberration * LENS_DISPERSION;
+            offsetR = inwardStep * lensBendPx(lensNormal, lensSurfacePx, max(LENS_IOR - spread, 1.0), gain, bezelWidthPx);
+            offsetB = inwardStep * lensBendPx(lensNormal, lensSurfacePx, LENS_IOR + spread, gain, bezelWidthPx);
+        }
+    }
+#else
     // ========================================
     // EDGE REFRACTION
     // Offset sampling UV inward (toward center) at edges — like looking
@@ -452,12 +614,15 @@ void main() {
         refractionMag = rimCurve * refractionPx;
     }
     vec2 dir = inwardDir;
+#ifndef HYPRGLASS_FEATURE_CONTOUR
+    // (a traced outline already pulls along each edge's own normal)
     if (refractionFlow > 0.001) {
         // pull along the edges instead of toward the centre
         vec2 mixedDir = mix(inwardDir, edgeDir(posPx), refractionFlow);
         float mixedLen = length(mixedDir);
         dir = mixedLen > 0.0001 ? mixedDir / mixedLen : inwardDir;
     }
+#endif
     vec2 baseOffset = dir * refractionMag * invFullSize;
 
     // ========================================
@@ -468,15 +633,17 @@ void main() {
     vec2 offsetR = baseOffset * (1.0 - chromaSpread);
     vec2 offsetG = baseOffset;
     vec2 offsetB = baseOffset * (1.0 + chromaSpread);
+#endif
 
     // ========================================
     // CENTER DOME LENS (subtle magnification in the flat interior)
     // Fades near edges so it doesn't interfere with edge refraction.
     // ========================================
     vec2 domeUV = vec2(0.0);
+#ifndef HYPRGLASS_FEATURE_CONTOUR   // a dome needs one centre: a traced outline has one per card
     if (lensDistortion > 0.001) {
         // Attached shell surfaces share one monitor-space lens, including across their join.
-        vec2 lensUV = hasMask ? uv * maskUVScale + maskUVOffset : uv;
+        vec2 lensUV = hasMask ? uv * maskUVScale + maskUVOffset : glassUV;
         vec2 c = (lensUV - 0.5) * 2.0;
         vec2 dGrad = vec2(
             -4.0 * c.x * (1.0 - c.y * c.y),
@@ -490,6 +657,7 @@ void main() {
         }
         domeUV = dGrad * lensScalePx * lensFade * invFullSize;
     }
+#endif
 
     // ========================================
     // BACKGROUND SAMPLING (frosted blur only)
@@ -501,13 +669,26 @@ void main() {
     vec2 uvG = uv + offsetG + domeUV;
     vec2 uvB = uv + offsetB + domeUV;
 
+#ifdef HYPRGLASS_FEATURE_LENS_EDGE
+    if (chromaticAberration > 0.001 && inRim) {
+#else
     if (chromaticAberration > 0.001 && edgeProximity > 0.01) {
+#endif
         color.r = sampleBlurred(uvR).r;
         color.g = sampleBlurred(uvG).g;
         color.b = sampleBlurred(uvB).b;
     } else {
         color = sampleBlurred(uvG).rgb;
     }
+
+#ifdef HYPRGLASS_FEATURE_FROST
+    // Frosted glass (frost): the backdrop was blurred further above; it also gets
+    // a little more colour and depth, before the theme's tone mapping below.
+    {
+        float frostLum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        color = max(mix(vec3(frostLum), color, 1.0 + FROST_SATURATION_LIFT * frostAmount), 0.0) * (1.0 - FROST_DIM * frostAmount);
+    }
+#endif
 
     // ========================================
     // FROSTED TINT (per-theme tone mapping)
@@ -549,6 +730,32 @@ void main() {
     float reflectionMax = max(max(color.r, color.g), color.b);
     vec3 reflectionHue = mix(vec3(1.0), reflectionMax > 0.001 ? color / reflectionMax : vec3(1.0), 0.25);
     color = mix(color, reflectionHue, reflectionAmount);
+
+#ifdef HYPRGLASS_FEATURE_LENS_EDGE
+    // ========================================
+    // RIM REFLECTION — the rim mirrors what is around the glass, as much as
+    // Schlick's Fresnel term gives for its slope: strongest where it is steepest.
+    // ========================================
+    if (lensReflection > 0.001 && inRim) {
+        vec2 mirrored = reflect(vec2(0.0, -1.0), lensNormal); // (inward, up)
+        // mirrored downward it lands on the backdrop just outside the edge; mirrored
+        // upward it sees the surroundings, read as far out as the sample reaches
+        // (one formula for both, so the reach has no seam where the slope crosses 45 degrees)
+        float runPx   = lensSurfacePx * -mirrored.x / max(-mirrored.y, 1e-3);
+        float reachPx = lensReflectionReachPx * tanh(min((rimDepthPx + runPx) / lensReflectionReachPx, 8.0));
+        vec4  seen    = sampleBlurred(uv - lensInward * reachPx * invFullSize);
+        // Schlick with lensReflection as the reflectance straight on (real glass: 0.04,
+        // a thin line only), fading out across the rim so the flat centre gets no seam
+        float u        = 1.0 - rimDepthPx / bezelWidthPx;
+        float straight = lensReflection * u;
+        float fresnel  = straight + (1.0 - straight) * pow(1.0 - clamp(lensNormal.y, 0.0, 1.0), 5.0);
+        // padding past the screen edge is cleared to transparent: mirror only what was sampled
+        float amount   = clamp(lensReflection * fresnel * seen.a * lensCornerWeight, 0.0, 1.0);
+        // Layer samples are already normalized for transparent monitor padding.
+        vec3 reflectedRGB = hasMask ? seen.rgb : seen.rgb / max(seen.a, 0.001);
+        color = mix(color, reflectedRGB, amount);
+    }
+#endif
 
     // grain-free copy for the rim tints, so the grain does not speckle their hue
     vec3 tintSource = color;
@@ -621,13 +828,18 @@ void main() {
     // SPECULAR — subtle top highlight (edge zone)
     // ========================================
     if (specularStrength > 0.001) {
-        float specT = max(1.0 - uv.y, 0.0);
+#ifdef HYPRGLASS_FEATURE_CONTOUR
+        // the edge facing the light, like the top of a box at angle 0
+        float specT = clamp(0.5 + 0.5 * dot(contourOutward, lightDir(specularAngle)), 0.0, 1.0);
+#else
+        float specT = max(1.0 - glassUV.y, 0.0);
         if (abs(specularAngle) > 0.001) {
             // rotate the highlight gradient toward the light: at angle 0, lightDir gives
-            // (0,-1) and dot(uv-0.5, L) = 0.5-uv.y, so 0.5+dot(...) reduces to 1-uv.y exactly
+            // (0,-1) and dot(glassUV-0.5, L) = 0.5-glassUV.y, so 0.5+dot(...) reduces to 1-glassUV.y exactly
             vec2 L = lightDir(specularAngle);
-            specT = clamp(0.5 + dot(uv - 0.5, L), 0.0, 1.0);
+            specT = clamp(0.5 + dot(glassUV - 0.5, L), 0.0, 1.0);
         }
+#endif
         float topBias = pow(specT, 2.0);
         float spec = topBias * lightingProximity * lightingProximity * specularStrength * 0.08;
         if (hasMask) rimReflection += vec3(1.0, 0.99, 0.97) * spec;
@@ -638,10 +850,40 @@ void main() {
     // INNER SHADOW (bottom rim)
     // ========================================
     if (!hasMask) {
-        float bottomBias = pow(uv.y, 2.0);
+#ifdef HYPRGLASS_FEATURE_CONTOUR
+        // the edge facing away from the light: 1 at the bottom, a quarter at the sides, like a box
+        float bottomBias = pow(0.5 + 0.5 * contourOutward.y, 2.0);
+#else
+        // max(): item fragments just above the glass box have glassUV.y < 0, where pow() is undefined
+        float bottomBias = pow(max(glassUV.y, 0.0), 2.0);
+#endif
         float shadow = bottomBias * edgeProximity * edgeProximity * 0.06;
         color *= 1.0 - shadow;
     }
+
+#ifdef HYPRGLASS_FEATURE_FOCUS_LIGHT
+    // ========================================
+    // FOCUS LIGHT — the active window's edge lit all the way round: a bright
+    // line just inside the edge over a soft sheen, brightest on the side the
+    // bevel light comes from. Last, so the inner shadow does not dim it.
+    // ========================================
+    float depthLogical = max(-bevelSdf, 0.0) / max(monitorScale, 0.001);
+    if (depthLogical < FOCUS_LIGHT_REACH) {
+        float lineT = (depthLogical - FOCUS_LIGHT_LINE_DEPTH) / FOCUS_LIGHT_LINE_WIDTH;
+        float profile = exp(-lineT * lineT) + FOCUS_LIGHT_SHEEN * exp(-depthLogical / FOCUS_LIGHT_SHEEN_FALLOFF);
+
+        // outward normal of the same crease-free distance, so the corners light without a seam
+        float sdfRight = roundingPower == 2.0 ? getBevelSDF(uv + vec2(invFullSize.x, 0.0)) : getCornerSDF(uv + vec2(invFullSize.x, 0.0));
+        float sdfDown  = roundingPower == 2.0 ? getBevelSDF(uv + vec2(0.0, invFullSize.y)) : getCornerSDF(uv + vec2(0.0, invFullSize.y));
+        vec2  grad     = vec2(sdfRight - bevelSdf, sdfDown - bevelSdf);
+        float gradLen  = length(grad);
+        vec2  outward  = gradLen > 1e-4 ? grad / gradLen : vec2(0.0, -1.0);
+        float facing   = clamp(dot(outward, lightDir(bevelAngle)) * 0.5 + 0.5, 0.0, 1.0);
+
+        vec3 light = focusLightColorAlpha > 0.001 ? mix(vec3(1.0), focusLightColor, focusLightColorAlpha) : vec3(1.0);
+        color = mix(color, light, clamp(focusLight * mix(FOCUS_LIGHT_FLOOR, 1.0, facing) * profile, 0.0, 1.0));
+    }
+#endif
 
     // float framebuffers (FP16 under wide-gamut cm) store unbounded values and
     // the glass re-samples its own output: unclamped color diverges over frames

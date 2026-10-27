@@ -2,7 +2,7 @@
 -- Use the outside glass rim only while this local build is loaded.
 local optical_windows = false
 for _, plugin in ipairs(hl.get_loaded_plugins()) do
-    if plugin.name == "hyprglass" and plugin.version == "0.10.0-optical-rim" then
+    if plugin.name == "hyprglass" and plugin.version == "0.11.0-optical-rim" then
         optical_windows = true
     end
 end

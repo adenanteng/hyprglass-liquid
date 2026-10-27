@@ -24,7 +24,7 @@ if [[ ! -f "$plugin_path" ]]; then
     fallback
     exit 0
 fi
-if hyprctl -j plugin list | jq -e '.[] | select(.name == "hyprglass" and .version == "0.10.0-optical-rim")' >/dev/null; then
+if hyprctl -j plugin list | jq -e '.[] | select(.name == "hyprglass" and .version == "0.11.0-optical-rim")' >/dev/null; then
     hyprctl reload
     exit 0
 fi
@@ -45,7 +45,7 @@ hyprctl reload
 ready=false
 for attempt in {1..10}; do
     status="$(hyprctl hyprglass status 2>&1 || true)"
-    if [[ "$status" == *'hyprglass 0.10.0-optical-rim: active'* && "$status" == *'shaders: ready'* ]]; then
+    if [[ "$status" == *'hyprglass 0.11.0-optical-rim: active'* && "$status" == *'shaders: ready'* ]]; then
         ready=true
         break
     fi
