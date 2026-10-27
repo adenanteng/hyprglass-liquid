@@ -22,6 +22,11 @@ filechooserdialog.background:backdrop {
     box-shadow: none;
 }
 
+/* GtkDialog paints its titlebar outside the content background. */
+dialog.background > headerbar.titlebar {
+    background-color: alpha(@window_bg_color, 0.50);
+}
+
 .background scrolledwindow,
 .background viewport,
 .background .view,

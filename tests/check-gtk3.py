@@ -35,7 +35,7 @@ for mode, bg, fg, sidebar in [('dark', '#242424', '#ffffff', '#1e1e1e'),
     assert not errors, errors
     Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
     dialog = Gtk.FileChooserDialog(title='Glass CSS check', action=Gtk.FileChooserAction.OPEN, use_header_bar=True)
-    expected = {'GtkFileChooserDialog': .50, 'GtkPlacesSidebar': .20, 'GtkTreeView': 0., 'GtkHeaderBar': 0.}
+    expected = {'GtkFileChooserDialog': .50, 'GtkPlacesSidebar': .20, 'GtkTreeView': 0., 'GtkHeaderBar': .50}
     found = set()
     for widget in walk(dialog):
         kind = widget.__gtype__.name
@@ -60,6 +60,7 @@ for mode, bg, fg, sidebar in [('dark', '#242424', '#ffffff', '#1e1e1e'),
     tabs_window = Gtk.Window()
     header = Gtk.HeaderBar()
     tabs_window.set_titlebar(header)
+    assert header.get_style_context().get_property('background-color', Gtk.StateFlags.NORMAL).alpha == 0.
     pages = Gtk.Stack()
     for title in ['Browse', 'Installed', 'Updates']:
         pages.add_titled(Gtk.Label(label=title), title, title)

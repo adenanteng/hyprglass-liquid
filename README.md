@@ -266,7 +266,7 @@ To undo the background styling, remove the import and restart Nautilus. Restore 
 
 ### Optional GTK3 applications and file chooser
 
-[`config/gtk3-glass.css`](config/gtk3-glass.css) extends the same material to GTK3 applications and the GTK portal file chooser. It uses Noctalia's generated palette, keeps foreground opacity unchanged, and gives the main window a 50% opaque base. Sidebars add a 20% tint. Views and headerbars use that single base instead of stacking solid fills. Pamac package cards get a light tint and 14px rounded corners.
+[`config/gtk3-glass.css`](config/gtk3-glass.css) extends the same material to GTK3 applications and the GTK portal file chooser. It uses Noctalia's generated palette, keeps foreground opacity unchanged, and gives the main window a 50% opaque base. Sidebars add a 20% tint. Views use that single base instead of stacking solid fills. GTK dialog titlebars are painted outside the content background, so they receive the same 50% tint explicitly; normal application headerbars remain transparent. Pamac package cards get a light tint and 14px rounded corners.
 
 This is a **global GTK3 stylesheet**, tested with `adw-gtk3` / `adw-gtk3-dark`, GTK 3.24.52, Pamac GTK3 10.7.0, and `xdg-desktop-portal-gtk` 1.15.3. Back up your current `~/.config/gtk-3.0/gtk.css`, `settings.ini`, and portal configuration before replacing an existing customization. The GTK4/Nautilus stylesheet is independent.
 
