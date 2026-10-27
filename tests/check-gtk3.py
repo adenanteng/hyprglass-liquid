@@ -3,7 +3,9 @@ from pathlib import Path
 import gi
 
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk
+gi.require_version('Handy', '1')
+from gi.repository import Gtk, Gdk, Handy
+Handy.init()
 
 root = Path(__file__).resolve().parents[1]
 css = (root / 'config/gtk3-glass.css').read_text()
@@ -54,7 +56,28 @@ for mode, bg, fg, sidebar in [('dark', '#242424', '#ffffff', '#1e1e1e'),
     context = card.get_style_context()
     assert abs(context.get_property('background-color', Gtk.StateFlags.NORMAL).alpha - .18) < .001
     assert context.get_property('border-radius', Gtk.StateFlags.NORMAL) == 14
+    # Pamac uses libhandy's real view switcher, whose theme paints an opaque image.
+    tabs_window = Gtk.Window()
+    header = Gtk.HeaderBar()
+    tabs_window.set_titlebar(header)
+    pages = Gtk.Stack()
+    for title in ['Browse', 'Installed', 'Updates']:
+        pages.add_titled(Gtk.Label(label=title), title, title)
+    switcher = Handy.ViewSwitcher()
+    switcher.set_stack(pages)
+    header.set_custom_title(switcher)
+    tabs_window.add(pages)
+    buttons = [widget for widget in walk(switcher) if isinstance(widget, Gtk.ToggleButton)]
+    assert len(buttons) == 3
+    for state in [Gtk.StateFlags.NORMAL, Gtk.StateFlags.CHECKED,
+                  Gtk.StateFlags.PRELIGHT, Gtk.StateFlags.CHECKED | Gtk.StateFlags.PRELIGHT,
+                  Gtk.StateFlags.BACKDROP, Gtk.StateFlags.CHECKED | Gtk.StateFlags.BACKDROP]:
+        for button in buttons:
+            context = button.get_style_context()
+            assert context.get_property('background-image', state) is None, (mode, state, 'solid tab image')
+            assert context.get_property('background-color', state).alpha == 0., (mode, state, 'solid tab color')
+    tabs_window.destroy()
     dialog.destroy()
     window.destroy()
     Gtk.StyleContext.remove_provider_for_screen(Gdk.Screen.get_default(), provider)
-    print(f'{mode}: chooser, sidebar, text opacity, and Pamac card styles passed')
+    print(f'{mode}: chooser, sidebar, text opacity, Pamac cards and tab states passed')

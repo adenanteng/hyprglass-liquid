@@ -319,7 +319,7 @@ python3 tests/check-gtk3.py
 python3 tests/test-gtk-portal.py
 ```
 
-The stylesheet check requires PyGObject, GTK3, the two adw-gtk3 themes, and a display. The refresh tests use mocked compositor/service commands. The production stylesheet has no `filter` or whole-widget `opacity` overrides.
+The stylesheet check requires PyGObject, GTK3, libhandy 1, the two adw-gtk3 themes, and a display. It checks the real libhandy tab buttons in normal, checked, hover, and backdrop states so the theme cannot reintroduce an opaque rectangular tab background. The refresh tests use mocked compositor/service commands. The production stylesheet has no `filter` or whole-widget `opacity` overrides.
 
 To undo this integration, first disable the watcher:
 
