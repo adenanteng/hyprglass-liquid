@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh GTK file chooser palette when Noctalia changes colors
+
+[Path]
+PathChanged=%h/.config/gtk-3.0/noctalia.css
+Unit=hyprglass-gtk-portal.service
+
+[Install]
+WantedBy=default.target

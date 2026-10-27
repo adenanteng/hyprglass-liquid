@@ -1,0 +1,7 @@
+[Unit]
+Description=Reload GTK portal colors after open file dialogs finish
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/hyprglass-refresh-gtk-portal
+TimeoutStartSec=infinity

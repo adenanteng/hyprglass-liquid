@@ -1,0 +1,103 @@
+/* Import after Noctalia's generated palette; only backgrounds gain alpha. */
+window.background,
+dialog.background,
+filechooserdialog.background,
+window.background:backdrop,
+dialog.background:backdrop,
+filechooserdialog.background:backdrop {
+    background-color: alpha(@window_bg_color, 0.50);
+    background-image: none;
+    color: @window_fg_color;
+}
+
+/* A single base layer avoids stacking opaque fills over the glass. */
+.background headerbar,
+.background .titlebar,
+.background toolbar,
+.background .toolbar,
+.background actionbar {
+    background-color: transparent;
+    background-image: none;
+    color: @window_fg_color;
+    box-shadow: none;
+}
+
+.background scrolledwindow,
+.background viewport,
+.background .view,
+.background treeview.view,
+.background iconview.view,
+.background list,
+.background flowbox,
+.background stack,
+.background notebook > stack {
+    background-color: transparent;
+    background-image: none;
+    color: @view_fg_color;
+}
+
+.background .sidebar,
+.background stacksidebar,
+.background placessidebar,
+.background list.navigation-sidebar {
+    background-color: alpha(@sidebar_bg_color, 0.20);
+    background-image: none;
+    color: @window_fg_color;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.background .sidebar .view,
+.background .sidebar list,
+.background placessidebar list,
+.background stacksidebar list {
+    background-color: transparent;
+}
+
+.background treeview.view:selected,
+.background iconview.view:selected,
+.background list > row:selected {
+    background-color: alpha(@accent_bg_color, 0.35);
+    color: @accent_fg_color;
+}
+
+/* GTK's file chooser can be hosted by a browser with a different base theme. */
+filechooser,
+filechooser label,
+filechooser treeview.view,
+filechooser .sidebar,
+filechooser .sidebar label {
+    color: @view_fg_color;
+}
+
+filechooser treeview header button,
+filechooser .path-bar button {
+    background-color: alpha(@window_fg_color, 0.08);
+    background-image: none;
+    color: @window_fg_color;
+}
+
+filechooser treeview header button {
+    border-color: alpha(@window_fg_color, 0.10);
+}
+
+/* Pamac's own stylesheet otherwise paints solid square package cards. */
+.background .package-box {
+    background-color: alpha(@view_bg_color, 0.18);
+    background-image: none;
+    border: 1px solid alpha(@window_fg_color, 0.12);
+    border-radius: 14px;
+    color: @view_fg_color;
+}
+
+.background .package-box:hover {
+    background-color: alpha(@view_bg_color, 0.28);
+    border-color: alpha(@accent_bg_color, 0.40);
+}
+
+filechooser paned > separator {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    box-shadow: none;
+}

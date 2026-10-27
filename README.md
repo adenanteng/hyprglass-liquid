@@ -264,6 +264,76 @@ To hide client-side close, maximize, and minimize buttons, merge `gtk-decoration
 
 To undo the background styling, remove the import and restart Nautilus. Restore the previous `gtk-decoration-layout` value to undo the button preference. Do not replace the entire GTK configuration with this snippet.
 
+### Optional GTK3 applications and file chooser
+
+[`config/gtk3-glass.css`](config/gtk3-glass.css) extends the same material to GTK3 applications and the GTK portal file chooser. It uses Noctalia's generated palette, keeps foreground opacity unchanged, and gives the main window a 50% opaque base. Sidebars add a 20% tint. Views and headerbars use that single base instead of stacking solid fills. Pamac package cards get a light tint and 14px rounded corners.
+
+This is a **global GTK3 stylesheet**, tested with `adw-gtk3` / `adw-gtk3-dark`, GTK 3.24.52, Pamac GTK3 10.7.0, and `xdg-desktop-portal-gtk` 1.15.3. Back up your current `~/.config/gtk-3.0/gtk.css`, `settings.ini`, and portal configuration before replacing an existing customization. The GTK4/Nautilus stylesheet is independent.
+
+```bash
+install -m 644 config/gtk3-glass.css "$HOME/.config/gtk-3.0/hyprglass-gtk3.css"
+```
+
+Use these imports in `~/.config/gtk-3.0/gtk.css`, replacing older conflicting material overrides after saving a backup:
+
+```css
+@import url("noctalia.css");
+@import url("hyprglass-gtk3.css");
+```
+
+Keep Noctalia's built-in GTK templates enabled. Set `gtk-application-prefer-dark-theme=0` in the existing `[Settings]` section of GTK3 `settings.ini`: Noctalia selects `adw-gtk3` or `adw-gtk3-dark` through system appearance settings, so an additional forced dark preference is unnecessary. The tested desktop also uses `gtk-decoration-layout=:` to hide window control buttons, consistent with its GTK4 configuration.
+
+For the GTK upload dialog, select the installed GTK backend in `~/.config/xdg-desktop-portal/hyprland-portals.conf`. Merge this key into its existing `[preferred]` section:
+
+```ini
+[preferred]
+org.freedesktop.impl.portal.FileChooser = gtk
+```
+
+Preserve existing backend preferences for other interfaces. Reload the portal configuration when no chooser is open:
+
+```bash
+systemctl --user restart xdg-desktop-portal-gtk.service xdg-desktop-portal.service
+```
+
+GTK3 caches imported CSS palettes in long-lived processes. The supplied user path unit watches Noctalia's generated GTK3 palette and refreshes **only the GTK backend** after every open portal dialog has closed. It leaves an inactive backend inactive; its next activation reads the new palette. This follows actual file changes without modifying Noctalia's packaged templates.
+
+```bash
+mkdir -p "$HOME/.local/bin" "$HOME/.config/systemd/user"
+install -m 644 scripts/refresh-gtk-portal.py "$HOME/.local/bin/hyprglass-refresh-gtk-portal"
+install -m 644 config/hyprglass-gtk-portal.path config/hyprglass-gtk-portal.service \
+    "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable --now hyprglass-gtk-portal.path
+systemctl --user start hyprglass-gtk-portal.service
+```
+
+These units target the standard `~/.config` location and require Hyprland's `hyprctl`, Python 3, and a systemd user session. Adjust the path unit if you use another GTK config directory.
+
+Pamac and other GTK3 applications may need reopening after palette changes. GTK3 applications that use an opaque X11 visual can remain opaque despite transparent CSS; native Wayland was used for the Pamac visual check. No whole-window opacity rule is applied. Dialogs drawn internally by an application rather than the GTK portal are outside the refresh service's scope.
+
+The live test opened and closed portal dialogs on both themes without selecting files, and inspected Pamac on Wayland without running package transactions. To validate the stylesheet and refresh guard:
+
+```bash
+python3 tests/check-gtk3.py
+python3 tests/test-gtk-portal.py
+```
+
+The stylesheet check requires PyGObject, GTK3, the two adw-gtk3 themes, and a display. The refresh tests use mocked compositor/service commands. The production stylesheet has no `filter` or whole-widget `opacity` overrides.
+
+To undo this integration, first disable the watcher:
+
+```bash
+systemctl --user disable --now hyprglass-gtk-portal.path
+systemctl --user stop hyprglass-gtk-portal.service
+rm "$HOME/.config/systemd/user/hyprglass-gtk-portal.path" \
+   "$HOME/.config/systemd/user/hyprglass-gtk-portal.service" \
+   "$HOME/.local/bin/hyprglass-refresh-gtk-portal"
+systemctl --user daemon-reload
+```
+
+Restore your backed-up GTK3 CSS/settings and portal preferences, remove the added material stylesheet, and restart the GTK backend after dialogs close. Reopen GTK3 applications. This does not require rolling back the HyprGlass plugin, Nautilus, or ChatGPT.
+
 ## How the rendering changes work
 
 The layer renderer samples the live backdrop and uses the rendered surface's alpha mask to locate the visible contour. It computes a rim normal from threshold-normalized coverage and validates the distance along that normal against the mask, then applies refraction and a backdrop-tinted shoulder highlight. The bevel is applied after panel compositing so the panel fill does not hide it.
